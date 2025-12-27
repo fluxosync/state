@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FLUXO | Sincronização de Realidade</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700&family=Space+Grotesk:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #00f2ea;
+            --secondary: #ff0055;
+            --bg: #050505;
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: white;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        h1, h2, h3, .brand-font {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        /* Canvas Background */
+        #quantum-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        /* UI Overlay */
+        #ui-layer {
+            position: relative;
+            z-index: 10;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            pointer-events: none; /* Let clicks pass through to canvas where needed */
+        }
+
+        .interactive {
+            pointer-events: auto;
+        }
+
+        /* Glassmorphism Cards */
+        .glass-panel {
+            background: var(--glass);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        /* Animations */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 15px var(--primary); }
+            50% { box-shadow: 0 0 30px var(--primary), 0 0 10px white; }
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        .animate-pulse-glow {
+            animation: pulse-glow 3s infinite;
+        }
+
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
+
+        /* Custom Scrollbar for Modal */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+        }
+
+        /* Toast Notification */
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 100;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s, bottom 0.3s;
+            border: 1px solid var(--primary);
+            box-shadow: 0 0 15px rgba(0, 242, 234, 0.2);
+        }
+
+        #toast.show {
+            visibility: visible;
+            opacity: 1;
+            bottom: 50px;
+        }
+
+        /* Tab Active State */
+        .tab-btn.active {
+            background: rgba(0, 242, 234, 0.2);
+            border-bottom: 2px solid var(--primary);
+            color: var(--primary);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Premium Badge */
+        .premium-badge {
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0px 0px 10px rgba(255, 215, 0, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Canvas for Particle Physics -->
+    <canvas id="quantum-canvas"></canvas>
+
+    <!-- Main UI -->
+    <div id="ui-layer" class="p-6">
+        
+        <!-- Header -->
+        <header class="flex justify-between items-center interactive animate-float">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-full border border-cyan-400 flex items-center justify-center bg-cyan-900/30">
+                    <div class="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
+                </div>
+                <span class="text-xl font-bold tracking-widest text-cyan-400 brand-font">FLUXO</span>
+            </div>
+            <button onclick="openManifesto()" class="text-xs uppercase tracking-widest text-gray-400 hover:text-white transition-colors border border-gray-700 px-3 py-1 rounded-full hover:border-gray-500">
+                Manifesto
+            </button>
+        </header>
+
+        <!-- Center Interaction Area (Invisible trigger for canvas) -->
+        <div class="flex-grow flex flex-col justify-center items-center text-center pointer-events-none">
+            <div id="status-display" class="mb-4 transition-all duration-500">
+                <h2 class="text-4xl md:text-6xl font-bold text-white mb-2 brand-font" id="sync-level">0%</h2>
+                <p class="text-cyan-200/70 text-sm tracking-widest uppercase">Sincronização</p>
+            </div>
+            <p class="text-gray-500 text-xs max-w-[200px] pointer-events-auto">Toque na tela para alinhar as partículas quânticas</p>
+        </div>
+
+        <!-- Footer / Controls -->
+        <footer class="w-full max-w-md mx-auto interactive">
+            <div class="glass-panel rounded-2xl p-4 mb-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs text-gray-400 uppercase">Estado Atual</span>
+                    <span id="connection-status" class="text-xs text-green-400 flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 bg-green-400 rounded-full"></span> Conectado
+                    </span>
+                </div>
+                <div class="w-full bg-gray-800 rounded-full h-1.5 mb-4 overflow-hidden">
+                    <div id="progress-bar" class="bg-gradient-to-r from-cyan-500 to-purple-500 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="openMonetization()" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white py-3 rounded-xl font-medium text-sm transition-all shadow-lg shadow-purple-900/20 flex flex-col items-center justify-center gap-1 group">
+                        <span>Desbloquear Potencial</span>
+                        <span class="text-[10px] text-purple-200 opacity-0 group-hover:opacity-100 transition-opacity">Acesso Vitalício</span>
+                    </button>
+                    <button onclick="openMonetization('plus')" class="bg-white/5 hover:bg-white/10 border border-white/10 text-white py-3 rounded-xl font-medium text-sm transition-all flex flex-col items-center justify-center gap-1">
+                        <span>Apoiar Projeto</span>
+                        <span class="text-[10px] text-gray-400">Doação Voluntária</span>
+                    </button>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- MODALS -->
+
+    <!-- Manifesto / Strategy Modal -->
+    <div id="modal-manifesto" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity opacity-0">
+        <div class="glass-panel w-full max-w-2xl max-h-[85vh] rounded-3xl p-6 md:p-8 overflow-y-auto custom-scroll relative transform scale-95 transition-transform duration-300">
+            <button onclick="closeModal('modal-manifesto')" class="absolute top-4 right-4 text-gray-400 hover:text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+            
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 mb-2 brand-font">O Gênero: Sincronização Cognitiva</h2>
+                <p class="text-sm text-gray-400">Estratégia de Lançamento Brasil 2026</p>
+            </div>
+
+            <div class="space-y-6 text-sm text-gray-300 leading-relaxed">
+                <div class="p-4 rounded-xl bg-white/5 border border-white/5">
+                    <h3 class="text-cyan-400 font-bold mb-1">1. O Conceito</h3>
+                    <p>O FLUXO não é um jogo, nem uma rede social. É um <strong>espelho de foco</strong>. O usuário interage com um campo quântico visual que representa sua mente. Ao organizar o caos visual, o usuário experimenta uma sensação real de ordem mental.</p>
+                </div>
+
+                <div class="p-4 rounded-xl bg-white/5 border border-white/5">
+                    <h3 class="text-purple-400 font-bold mb-1">2. O Problema Novo</h3>
+                    <p>Em 2026, o problema não será a falta de informação, mas a <strong>"Dissonância Digital"</strong>: a ansiedade causada por inputs simultâneos desconexos. O FLUXO resolve isso oferecendo um único ponto de foco central.</p>
+                </div>
+
+                <div class="p-4 rounded-xl bg-white/5 border border-white/5">
+                    <h3 class="text-pink-400 font-bold mb-1">3. Dopamina & Psicologia</h3>
+                    <p>O mecanismo utiliza o <strong>Efeito Zeigarnik</strong> (tendência de lembrar tarefas incompletas) invertido. Ao "limpar" a tela de partículas, o cérebro recebe um sinal de "tarefa concluída", liberando dopamina de forma saudável e não viciante, mas sim relaxante.</p>
+                </div>
+
+                <div class="p-4 rounded-xl bg-white/5 border border-white/5">
+                    <h3 class="text-yellow-400 font-bold mb-1">4. Monetização Legal (Menor de Idade)</h3>
+                    <p>Sem CNPJ, sem intermediários. O modelo é <strong>"Acesso a Chave Privada"</strong>. O usuário paga por uma chave (Pix) que libera modos visuais avançados. É uma venda de produto digital único, isento de burocracia complexa para microempreendedores informais, focado em Pix Copia-e-Cola.</p>
+                </div>
+
+                <div class="p-4 rounded-xl bg-white/5 border border-white/5">
+                    <h3 class="text-green-400 font-bold mb-1">5. Viralização</h3>
+                    <p>O app gera uma "Assinatura de Frequência" (uma imagem única do estado das partículas do usuário) que pode ser compartilhada no Stories. "Minha frequência hoje está 98% alinhada". Isso gera curiosidade e comparação saudável.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monetization Modal -->
+    <div id="modal-monetization" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/90 backdrop-blur-md transition-opacity opacity-0">
+        <div class="glass-panel w-full max-w-md rounded-3xl overflow-hidden relative transform scale-95 transition-transform duration-300">
+            
+            <button onclick="closeModal('modal-monetization')" class="absolute top-4 right-4 text-gray-400 hover:text-white z-10">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+
+            <!-- Tabs -->
+            <div class="flex border-b border-gray-700">
+                <button onclick="switchTab('premium')" id="tab-premium" class="tab-btn active flex-1 py-4 text-sm font-medium text-gray-400 hover:text-white transition-colors uppercase tracking-wider">
+                    Pulso Ativo
+                </button>
+                <button onclick="switchTab('plus')" id="tab-plus" class="tab-btn flex-1 py-4 text-sm font-medium text-gray-400 hover:text-white transition-colors uppercase tracking-wider">
+                    Apoio / Plus
+                </button>
+            </div>
+
+            <div class="p-6">
+                <!-- Premium Content -->
+                <div id="content-premium" class="tab-content active">
+                    <div class="text-center mb-6">
+                        <div class="inline-block p-3 rounded-full bg-yellow-500/10 mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-yellow-500" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-white mb-1">Desbloqueio Total</h3>
+                        <p class="text-xs text-gray-400">Acesso vitalício a todos os modos de frequência.</p>
+                    </div>
+
+                    <div class="bg-black/40 rounded-xl p-4 mb-4 border border-gray-700">
+                        <!-- Contact Capture -->
+<div class="mb-4">
+  <label class="text-xs text-gray-400 mb-2 block">
+    Seu WhatsApp ou Email
+  </label>
+  <input
+    type="text"
+    id="user-contact"
+    placeholder="Ex: (11) 99999-9999 ou email@exemplo.com"
+    class="w-full bg-gray-800 text-white text-sm p-3 rounded-lg border border-gray-600 focus:border-cyan-500 outline-none"
+  />
+    <button
+  onclick="sendToCentral()"
+  class="w-full mt-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white py-3 rounded-xl font-medium text-sm transition-all shadow-lg shadow-cyan-500/20"
+>
+  Enviar informações para a Central
+</button>
+
+  <p class="text-[10px] text-gray-500 mt-2">
+    Usado apenas para enviar sua chave de ativação.
+  </p>
+</div>
+
+                        <p class="text-xs text-gray-500 mb-2 uppercase text-center">Pix Copia-e-Cola (R$ 9,90)</p>
+                        <div class="flex items-center gap-2">
+                            <input type="text" readonly id="pix-premium-code" value="00020126360014BR.GOV.BCB.PIX0114+5585985888962520400005303986540599.005802BR5901N6001C62220518PremiumEarlySuppor6304F324" class="w-full bg-gray-800 text-[10px] text-gray-300 p-3 rounded-lg border border-gray-600 outline-none font-mono truncate">
+                            <button onclick="copyPix('pix-premium-code')" class="bg-cyan-600 hover:bg-cyan-500 text-white p-3 rounded-lg transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Plus Content -->
+                <div id="content-plus" class="tab-content">
+                    <div class="text-center mb-6">
+                        <div class="inline-block p-3 rounded-full bg-purple-500/10 mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-purple-500" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-white mb-1">Apoio Voluntário</h3>
+                        <p class="text-xs text-gray-400">Apoie o desenvolvimento independente.</p>
+                    </div>
+
+                    <div class="bg-black/40 rounded-xl p-4 mb-4 border border-gray-700">
+                        <p class="text-xs text-gray-500 mb-2 uppercase text-center">Pix Copia-e-Cola (Valor Livre)</p>
+                        <div class="flex items-center gap-2">
+                            <input type="text" readonly id="pix-plus-code" value="00020126360014BR.GOV.BCB.PIX0114+00020126360014BR.GOV.BCB.PIX0114+55859858889625204000053039865802BR5901N6001C62110507Doacoes6304CE7B(apoio63044A42" class="w-full bg-gray-800 text-[10px] text-gray-300 p-3 rounded-lg border border-gray-600 outline-none font-mono truncate">
+                            <button onclick="copyPix('pix-plus-code')" class="bg-purple-600 hover:bg-purple-500 text-white p-3 rounded-lg transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Validation Section -->
+                <div class="mt-6 pt-6 border-t border-gray-700">
+                    <label class="text-xs text-gray-400 mb-2 block">Validar Pagamento (Manual)</label>
+                    <p class="text-[10px] text-gray-500 mb-3">Após pagar, envie o comprovante para o suporte e insira a chave de liberação recebida abaixo.</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="activation-key" placeholder="Cole sua chave aqui..." class="flex-1 bg-gray-800 text-white text-sm p-3 rounded-lg border border-gray-600 focus:border-cyan-500 outline-none">
+                        <button onclick="validateKey()" class="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-all shadow-lg shadow-cyan-500/20">
+                            Ativar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast">Mensagem aqui</div>
+
+    <div id="daily-message" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+  <div class="glass-panel rounded-2xl p-6 text-center max-w-xs">
+    <h3 class="text-lg font-bold text-cyan-400 mb-2 brand-font">
+      Pulso Diário
+    </h3>
+    <p class="text-sm text-gray-300 mb-4">
+      Seu fluxo de hoje ainda não foi alinhado.
+    </p>
+    <button onclick="closeDailyMessage()" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2 rounded-xl transition-all">
+      Alinhar agora
+    </button>
+  </div>
+</div>
+    
+    <script>
+        /**
+         * FLUXO Core Logic
+         * Handles Canvas Animation, State Management, and UI Interactions
+         */
+
+        // --- Configuration & State ---
+        const config = {
+            particleCount: window.innerWidth < 768 ? 60 : 120,
+            connectionDistance: 100,
+            mouseDistance: 150,
+            baseSpeed: 0.5
+        };
+
+        const state = {
+            syncLevel: 0,
+            isPremium: false,
+            particles: []
+        };
+
+        // --- Canvas Setup ---
+        const canvas = document.getElementById('quantum-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- Particle System ---
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5) * config.baseSpeed;
+                this.vy = (Math.random() - 0.5) * config.baseSpeed;
+                this.size = Math.random() * 2 + 1;
+                this.color = Math.random() > 0.5 ? '#00f2ea' : '#ff0055'; // Cyan or Pink
+                this.originalColor = this.color;
+                this.synced = false;
+            }
+
+            update(mouseX, mouseY) {
+                // Movement
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Bounce off edges
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+
+                // Mouse Interaction (Repel/Attract logic)
+                const dx = mouseX - this.x;
+                const dy = mouseY - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < config.mouseDistance) {
+                    const forceDirectionX = dx / distance;
+                    const forceDirectionY = dy / distance;
+                    const force = (config.mouseDistance - distance) / config.mouseDistance;
+                    
+                    // Gentle attraction to create "clustering" effect
+                    const direction = -1; // -1 attract, 1 repel
+                    this.vx += forceDirectionX * force * 0.05 * direction;
+                    this.vy += forceDirectionY * force * 0.05 * direction;
+                    
+                    this.synced = true;
+                    this.color = '#ffffff'; // Turn white when synced
+                } else {
+                    // Slowly return to normal color
+                    if (Math.random() > 0.98) this.synced = false;
+                    if (!this.synced) this.color = this.originalColor;
+                }
+
+                // Friction
+                this.vx *= 0.99;
+                this.vy *= 0.99;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = this.synced ? 15 : 5;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+            }
+        }
+
+        // Initialize Particles
+        for (let i = 0; i < config.particleCount; i++) {
+            state.particles.push(new Particle());
+        }
+
+        // Mouse Tracking
+        let mouse = { x: -1000, y: -1000 };
+        window.addEventListener('mousemove', e => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+        window.addEventListener('touchmove', e => {
+            mouse.x = e.touches[0].clientX;
+            mouse.y = e.touches[0].clientY;
+        });
+        window.addEventListener('touchend', () => {
+            mouse.x = -1000;
+            mouse.y = -1000;
+        });
+
+        // --- Animation Loop ---
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            
+            // Draw connections
+            let syncedCount = 0;
+
+            for (let i = 0; i < state.particles.length; i++) {
+                const p1 = state.particles[i];
+                p1.update(mouse.x, mouse.y);
+                p1.draw();
+
+                if (p1.synced) syncedCount++;
+
+                for (let j = i + 1; j < state.particles.length; j++) {
+                    const p2 = state.particles[j];
+                    const dx = p1.x - p2.x;
+                    const dy = p1.y - p2.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < config.connectionDistance) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = `rgba(100, 200, 255, ${1 - dist / config.connectionDistance})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.moveTo(p1.x, p1.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Update Sync Level UI
+            const syncPercentage = Math.min(100, Math.floor((syncedCount / state.particles.length) * 100));
+            updateHUD(syncPercentage);
+
+            requestAnimationFrame(animate);
+        }
+
+        // --- UI Logic ---
+        const hudLevel = document.getElementById('sync-level');
+        const hudProgress = document.getElementById('progress-bar');
+
+        function updateHUD(level) {
+            // Only update DOM periodically to save performance
+            if (Math.random() > 0.8) {
+                hudLevel.innerText = level + '%';
+                hudProgress.style.width = level + '%';
+                
+                // Dynamic color based on level
+                if (level > 80) {
+                    hudLevel.classList.add('text-yellow-400');
+                    hudLevel.classList.remove('text-white');
+                } else {
+                    hudLevel.classList.remove('text-yellow-400');
+                    hudLevel.classList.add('text-white');
+                }
+            }
+        }
+
+        animate();
+
+        // --- Modal & Interaction Logic ---
+        
+        function openManifesto() {
+            const modal = document.getElementById('modal-manifesto');
+            modal.classList.remove('hidden');
+            // Small delay to allow display:block to apply before opacity transition
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.querySelector('div').classList.remove('scale-95');
+                modal.querySelector('div').classList.add('scale-100');
+            }, 10);
+        }
+
+        function openMonetization(tab = 'premium') {
+            const modal = document.getElementById('modal-monetization');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.querySelector('div').classList.remove('scale-95');
+                modal.querySelector('div').classList.add('scale-100');
+            }, 10);
+            switchTab(tab);
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.add('opacity-0');
+            modal.querySelector('div').classList.remove('scale-100');
+            modal.querySelector('div').classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        function switchTab(tabName) {
+            // Update buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`content-${tabName}`).classList.add('active');
+        }
+
+        
+            function copyPix(elementId) {
+  const contact = document.getElementById("user-contact");
+
+  if (!contact || contact.value.trim().length < 5) {
+    showToast("Informe seu WhatsApp ou email antes de copiar o Pix.");
+    return;
+  }
+
+  const copyText = document.getElementById(elementId);
+  copyText.select();
+  copyText.setSelectionRange(0, 99999);
+
+  navigator.clipboard.writeText(copyText.value).then(() => {
+    showToast("Pix copiado! Após pagar, entraremos em contato.");
+  });
+}
+
+        function validateKey() {
+  const input = document.getElementById('activation-key');
+  const key = input.value.trim().toUpperCase();
+
+  const validKeys = [
+    "FLUXO-A1B2",
+    "FLUXO-C3D4",
+    "FLUXO-E5F6",
+    "FLUXO-G7H8",
+    "FLUXO-J9K0"
+  ];
+
+  const usedKeys = JSON.parse(localStorage.getItem("fluxo_used_keys")) || [];
+
+  if (!validKeys.includes(key)) {
+    showToast("Código inválido.");
+    return;
+  }
+
+  if (usedKeys.includes(key)) {
+    showToast("Este código já foi utilizado.");
+    return;
+  }
+
+  usedKeys.push(key);
+  localStorage.setItem("fluxo_used_keys", JSON.stringify(usedKeys));
+
+  state.isPremium = true;
+  showToast("Experiência desbloqueada.");
+
+  closeModal('modal-monetization');
+
+  document.querySelector('.brand-font').innerText = "FLUXO ∞";
+  document.querySelector('.brand-font').classList.add('premium-badge');
+}
+
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            toast.innerText = message;
+            toast.className = "show";
+            setTimeout(function(){ toast.className = toast.className.replace("show", ""); }, 3000);
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            if (event.target.classList.contains('fixed')) {
+                // Check if it's a modal container
+                if (event.target.id === 'modal-manifesto') closeModal('modal-manifesto');
+                if (event.target.id === 'modal-monetization') closeModal('modal-monetization');
+            }
+        }
+function sendToCentral() {
+  const contact = document.getElementById("user-contact");
+
+  if (!contact || contact.value.trim().length < 5) {
+    showToast("Preencha seu WhatsApp ou email primeiro.");
+    return;
+  }
+
+  const email = "fluxo.sync@gmail.com";
+  const subject = encodeURIComponent("FLUXO | Solicitação de Ativação");
+  const body = encodeURIComponent(
+    "Olá, equipe FLUXO!\n\n" +
+    "Meu contato: " + contact.value.trim() + "\n\n" +
+    "Já vou realizar o pagamento via Pix.\n" +
+    "Envio o comprovante em seguida.\n\n" +
+    "Obrigado!"
+  );
+
+  window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+}
+
+// --- DAILY RETURN SYSTEM (Pulso Diário) ---
+
+function checkDailyPulse() {
+  const today = new Date().toDateString();
+  const lastVisit = localStorage.getItem("fluxo_last_visit");
+
+  if (lastVisit !== today) {
+    setTimeout(() => {
+      document.getElementById("daily-message").classList.remove("hidden");
+    }, 1200);
+  }
+}
+
+function closeDailyMessage() {
+  const today = new Date().toDateString();
+  localStorage.setItem("fluxo_last_visit", today);
+  document.getElementById("daily-message").classList.add("hidden");
+}
+
+// chama automaticamente ao abrir o app
+checkDailyPulse();
+                        
+// --- ENCERRAMENTO SILENCIOSO (100%) ---
+
+function fluxoEncerrar() {
+  // pequena pausa antes do encerramento
+  setTimeout(() => {
+    document.getElementById("final-message").classList.remove("hidden");
+  }, 1800);
+}
+            
+            
+    </script>
+            
+<div id="final-message" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black">
+  <span class="text-gray-300 text-xl tracking-wide">
+    encerre.
+  </span>
+</div>            
+            
+</body>
+</html>

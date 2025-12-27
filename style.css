@@ -1,0 +1,22 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  color: #ccc;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.center {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hidden {
+  display: none;
+}
+
+.fade {
+  transition: opacity 0.8s ease;
+}
